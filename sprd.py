@@ -1,7 +1,7 @@
 import pandas as pd
 import numpy as np
 from mwmatching import maxWeightMatching
-
+from IPython.display import display
 
 class SwissPowerRankDraw():
 
@@ -32,25 +32,32 @@ class SwissPowerRankDraw():
                 y = tourn_df[margin_col].values
                 pinv = np.linalg.pinv(A)
                 return pd.Series(pinv.dot(y), index=game_df.columns).sort_values(ascending=False)
+            
+            def predict_margin(game_df, strengths):
+                margin = game_df.dot(strengths)
+                margin.name = 'Predicted margin'
+                return margin
 
             game_df = get_game_df(tourn_df, team1_col, team2_col)
             team_strengths = get_team_strengths(game_df, margin_col)
+            expected_margin = predict_margin(game_df, team_strengths)
 
-            return team_strengths
+            return team_strengths, expected_margin
 
 
         # return df of team and strength and rank
-        team_strengths = (get_team_ranks(rounds, 'team_name_x', 'team_name_y', 'margin')
-                          .reset_index()
+        team_strengths, expected_margin = get_team_ranks(rounds, 'team_name_x', 'team_name_y', 'margin')
+        team_strengths = (team_strengths.reset_index()
                           .rename(columns={'index':'team_name', 0:'Strength'}))
+
 
         # ranks are used for indicies therefore must start from 0
         team_strengths['rank'] = team_strengths['Strength'].rank(ascending=False, method = 'first').round(0).astype(int)-1
-        return team_strengths
+        return team_strengths, expected_margin
 
     def calculate_next_round(self, rounds):
 
-        team_ranks = self.get_rankings(rounds)
+        team_ranks, _ = self.get_rankings(rounds)
 
         previous_pairs = rounds.apply(lambda row: frozenset([row["team_name_x"], row["team_name_y"]]), axis=1)
         new_pairs = self.find_pairings(team_ranks, previous_pairs)
@@ -155,12 +162,10 @@ class SwissPowerRankDraw():
         top_8 = team_ranks.sort_values('Strength', ascending=False).head(8)
 
         return top_8, rounds
-    
-def hello_world():
-    print('Hi EMily')
-    
+
 def throw_user_error(message):
     display(message)
+    input("Press enter to proceed...")
     assert False, message
 
 def RunRound(original_df, check_with_user = True):
@@ -186,7 +191,7 @@ def RunRound(original_df, check_with_user = True):
 
     # calculate team ranks
     sdt = SwissPowerRankDraw()
-    team_ranks = sdt.get_rankings(tournament_so_far)
+    team_ranks, expected_margin = sdt.get_rankings(tournament_so_far)
     display('Current Rankings')
     display(team_ranks)
 
@@ -202,6 +207,5 @@ def RunRound(original_df, check_with_user = True):
         check_read_overwrite_ready = input("Are you happy with this update?: (Y/N)")
         if check_read_overwrite_ready != 'Y': throw_user_error('Spreadsheet overwrite cancelled, please run again')
             
-    return tournament[spread_sheet_cols]
+    return tournament[spread_sheet_cols], team_ranks, expected_margin
 
-    tournament[spread_sheet_cols]
